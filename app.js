@@ -39,15 +39,23 @@ const store = new mongoDBSession({
       collection: "sessions"
 })
 
-app.use(
-      session({
-            secret: "mongo srcetkey",
-            resave: false,
-            saveuninitialized:false,
-            store: store,
+// app.use(
+//       session({
+//             secret: "mongo srcetkey",
+//             resave: false,
+//             saveuninitialized:false,
+//             store: store,
 
-      })
-)
+//       })
+// )
+
+
+app.use(session({
+    secret: 'mongo srcetkey',
+    resave: false,
+    saveUninitialized: true,
+}));
+
 
 app.get("/", (req, res)=> {
     res.send('<h1 style="text-align:center; color:#FF0000">Welcome To My ToDo App</h1>');
