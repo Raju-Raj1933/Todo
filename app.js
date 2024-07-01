@@ -1,13 +1,13 @@
 const express = require("express");
-const bcrypt = require("bcrypt");
 const mongoose = require("mongoose"); 
-const {cleanUpAndValidate} = require("./utils/AuthUtils");
-const UserSchema = require("./UserSchema");
+const bcrypt = require("bcrypt");
 const validator = require('validator');
 const session = require("express-session");
+const mongoDBSession = require("connect-mongodb-session")(session);
+const UserSchema = require("./UserSchema");
+const {cleanUpAndValidate} = require("./utils/AuthUtils");
 const isAuth = require("./utils/middleware");
 const TodoModel = require("./models/TodoModel");
-const mongoDBSession = require("connect-mongodb-session")(session);
 const rateLimiting = require("./middleware.js/rateLimiting");
 
 
@@ -34,6 +34,8 @@ app.set("view engine", "ejs");
 app.use(express.urlencoded({extended:true}));
 app.use(express.static("public"))
 
+
+
 const store = new mongoDBSession({
       uri: mongoURI,
       collection: "sessions"
@@ -53,44 +55,43 @@ const store = new mongoDBSession({
 app.use(session({
     secret: 'mongo srcetkey',
     resave: false,
-    saveUninitialized: true,
-}));""
+    saveUninitialized: false,
+    store: store,
+}));
 
 
 app.get("/", (req, res)=> {
-    res.send('<h1 style="text-align:center; color:#FF0000">Welcome To My ToDo App</h1>');
+   return res.send('<h1 style="text-align:center; color:#FF0000">Welcome To My ToDo App</h1>');
 })
 
 app.get("/register", (req, res)=>{
-      res.render("register");
-})
+     return res.render("register");
+});
 
 app.get("/login", (req, res)=>{
-      res.render("login");
-})
+     return res.render("login");
+});
 
 
 app.post("/register", async (req, res) => {
-  console.log(req.body);
   const { name, email, username, password } = req.body;
   try {
    await cleanUpAndValidate({ name, email, password, username });
   } catch (err) {
       return res.send({
-            status: 400,
+            status: 402,
             message: err
       });
   }
 
   const hashedPassword = await bcrypt.hash(password, saltround);
-  console.log(hashedPassword);
 
-  let user = UserSchema({
+  let user = new UserSchema({
        name: name,
        email: email,
        password : hashedPassword,
        username : username,
-  })
+  });
 
   let userAvailability;
 
@@ -101,37 +102,26 @@ app.post("/register", async (req, res) => {
             status: 400,
             message: "Internal server error",
             error: err
-      })
+      });
   }
 
   if(userAvailability){
       return res.send({
-            status: 400,
+            status: 403,
             message: "User already esisit"
-      })
+      });
   }
 
   try {
       const userDb = await user.save();
-      return res.send ({
-            status: 201,
-            message: "Register sucessfully",
-            data : ({
-                  name: userDb.name,
-                  email: userDb.email,
-                  username: userDb.username,
-                  password: userDb.password,
-                  _id: userDb._id
-            })
-      })
+      return res.status(200).redirect("/login");
   } catch (err) {
       return res.send({
          status: 400,
          message: "Internal Server Error, Plaset check and try again",
-         error: err
-      })
+         error: err,
+      });
   }
-  
 });
 
 
@@ -139,12 +129,17 @@ app.post("/login", async (req, res) => {
 
   const { loginId, password } = req.body;
 
-      if (typeof loginId !== "string" || typeof password !== "string" || !loginId || !password) {
-            return res.send({ 
-                  status: 400,
-                  message: "Internal server error" 
-            });
-      }
+      if (
+    !loginId ||
+    !password ||
+    typeof loginId !== "string" ||
+    typeof password !== "string"
+  ) {
+    return res.send({
+      status: 400,
+      message: "Invalid Data",
+    });
+  }
 
       let userDb;
 
@@ -154,11 +149,10 @@ app.post("/login", async (req, res) => {
             } else {
                   userDb = await UserSchema.findOne({ username: loginId }); 
             }
-            console.log(userDb);
 
             if (!userDb) {
                   return res.send({
-                        status: 400,
+                        status: 401,
                         message: "User not found, Please register first"
                   });
             }
@@ -167,9 +161,9 @@ app.post("/login", async (req, res) => {
 
             if (!isMatch) {
                   return res.send({
-                        status: 400,
+                        status: 403,
                         message: "Data mismatch",
-                        data: req.body
+                        data: userDb,
                   });
             }
 
@@ -194,11 +188,101 @@ app.post("/login", async (req, res) => {
 });
 
 
-app.get("/dashboard", isAuth, (req, res)=>{
-      res.render("dashboard");
-})
+app.get("/dashboard", isAuth,  (req, res)=>{
+     return res.render("dashboard");
+});
+
+app.post("/logout", isAuth, rateLimiting, (req, res)=>{   // rateLimiting,
+     req.session.destroy((err) => {
+      if(err) throw err;
+      return res.redirect("/login");
+     });
+});
+
+app.post("/logout_from_all_devices", isAuth,
+ rateLimiting,  async (req, res) => {
+  const username = req.session.user.username;
+  const Schema = mongoose.Schema;
+ const sessionSchema = new Schema({ _id: String }, { strict: false });
+  const SessionModel = mongoose.model("session", sessionSchema );
+
+  try {
+    // const Schema = mongoose.Schema;
+    const sessionSchema = new Schema({ _id: String }, { strict: false });
+
+    let SessionModel;                                     
+    if (mongoose.models.session) {                       
+      SessionModel = mongoose.model("session");           
+    } else {
+      SessionModel = mongoose.model("session", sessionSchema); 
+    }                                                   
+
+    const sessionDb = await SessionModel.deleteMany({
+      "session.user.username": username,
+    });
+
+    console.log("Deleted Sessions: ", sessionDb);        
+
+    return res.send({
+      status: 200,
+      message: "Logged out from all devices successfully.",
+    });
+  } catch (error) {
+    console.error("Error logging out from all devices:", error);  
+    return res.send({
+      status: 400,
+      message: "Logged out from all devices Unsuccessfully.",
+      error: error.message,
+    });
+  }
+});
 
 
+app.post("/create-item", isAuth, rateLimiting, async (req, res)=>{
+ const todoText = req.body.todo;
+ console.log(todoText);
+      if(!todoText){
+            return res.send({
+                  status: 400,
+                  message: "No data, Please Insert Data First",
+            });
+      }
+
+      if(typeof todoText !== "string"){
+            return res.send({
+      status: 400,
+      message: "Invalid text",
+    });
+ }
+
+      if(todoText.length > 100){
+            return res.send({
+                  status: 400,
+                  message: "Data is to long"
+            });
+      }
+
+      let todo = new TodoModel({
+            todo: todoText,
+            username: req.session.user.username,
+      });
+
+try{
+      const todoDb = await todo.save();
+      return res.send({
+            status: 201,
+            message: "Data inserted sucessfully",
+            data:todoDb,
+      });
+}catch (err){
+      return res.send({
+            status: 500,
+            message:"Database error, Please try again",
+            error: err,
+      });
+}
+
+});
 
 app.post("/edit-item", isAuth, rateLimiting, async (req, res) => {
 
@@ -285,7 +369,6 @@ app.post("/pagination_dashboard", isAuth, async(req, res) => {
   const skip = req.query.skip || 0;
   const LIMIT = 5;
   const username = req.session.user.username;
-  console.log(skip, username);
   try{
     let todos = await TodoModel.aggregate([
       {$match : {username : username}},
@@ -295,14 +378,12 @@ app.post("/pagination_dashboard", isAuth, async(req, res) => {
         },
       },
     ]);
-    console.log(todos);
     return res.send({
       status: 200,
       message: "Read Successfull",
       data: todos,
     });
   } catch (err) {
-        console.log(error);
     return res.send({
       status: 400,
       message: "Database Error, Please try again later",
@@ -322,103 +403,12 @@ app.post("/pagination_dashboard", isAuth, async(req, res) => {
 
 
 
-app.post("/logout", isAuth, (req, res)=>{   // rateLimiting,
-     req.session.destroy((err) => {
-      if(err) throw err;
-      return res.redirect("/login");
-     })
-})
 
 
-
-app.post("/logout_from_all_devices", isAuth,  async (req, res) => {
-  const username = req.session.user.username;
-  const Schema = mongoose.Schema;
- const sessionSchema = new Schema({ _id: String }, { strict: false });
-  const SessionModel = mongoose.model("session", sessionSchema );
-
-  try {
-    // const Schema = mongoose.Schema;
-    const sessionSchema = new Schema({ _id: String }, { strict: false });
-
-    let SessionModel;                                     
-    if (mongoose.models.session) {                       
-      SessionModel = mongoose.model("session");           
-    } else {
-      SessionModel = mongoose.model("session", sessionSchema); 
-    }                                                   
-
-    const sessionDb = await SessionModel.deleteMany({
-      "session.user.username": username,
-    });
-
-    console.log("Deleted Sessions: ", sessionDb);        
-
-    return res.send({
-      status: 200,
-      message: "Logged out from all devices successfully.",
-    });
-  } catch (error) {
-    console.error("Error logging out from all devices:", error);  
-    return res.send({
-      status: 400,
-      message: "Logged out from all devices Unsuccessfully.",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/create-item", isAuth, rateLimiting, async (req, res)=>{
- const todoText = req.body.todo;
- console.log(todoText);
-      if(!todoText){
-            return res.send({
-                  status: 400,
-                  message: "No data, Please Insert Data First",
-            });
-      }
-
-      if(typeof todoText !== "string"){
-            return res.send({
-      status: 400,
-      message: "Invalid text",
-    });
- }
-
-      if(todoText.length > 100){
-            return res.send({
-                  status: 400,
-                  message: "Data is to long"
-            })
-      }
-
-      let todo = new TodoModel({
-            todo: todoText,
-            username: req.session.user.username,
-      });
-           console.log(todo +"up");
-
-try{
-      const todoDb = await todo.save();
-      console.log(todoDb);
-      return res.send({
-            status: 200,
-            message: "Data inserted sucessfully",
-            data:todoDb,
-      });
-}catch (err){
-      return res.send({
-            status: 400,
-            message:"Database error, Please try again",
-            error: err,
-      });
-}
-
-});
 
 
 app.listen(PORT, ()=>{
-      console.log("connected");
+      console.log(`App is running at ${PORT}`);
 });
 
 
