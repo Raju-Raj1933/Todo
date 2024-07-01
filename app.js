@@ -12,11 +12,11 @@ const rateLimiting = require("./middleware.js/rateLimiting");
 
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8000;
 const saltround = 15;
 
 
-const mongoURI = `mongodb+srv://raju123:user123@cluster0.bdlteyq.mongodb.net/`;
+const mongoURI = `mongodb+srv://raju123:user123@cluster0.bdlteyq.mongodb.net/test`
 
 mongoose.set("strictQuery", false);
 mongoose
@@ -54,7 +54,7 @@ app.use(session({
     secret: 'mongo srcetkey',
     resave: false,
     saveUninitialized: true,
-}));
+}));""
 
 
 app.get("/", (req, res)=> {
