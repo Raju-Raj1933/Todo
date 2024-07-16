@@ -25,10 +25,7 @@ document.addEventListener("click", function (event) {
         alert(err);
       });
   }
-
   if (event.target.classList.contains("edit-me")) {
-    //id
-    //newData
     const id = event.target.getAttribute("data-id");
     const newData = prompt("Enter your new todo text");
 
@@ -41,16 +38,17 @@ document.addEventListener("click", function (event) {
           alert(res.data.message);
           return;
         }
-
         event.target.parentElement.parentElement.querySelector(
           ".item-text"
         ).innerHTML = newData;
+
       })
       .catch((err) => {
         console.log(err);
         alert(err);
       });
   }
+
   if (event.target.classList.contains("delete-me")) {
     const id = event.target.getAttribute("data-id");
     console.log(id);
@@ -63,8 +61,6 @@ document.addEventListener("click", function (event) {
           alert(res.data.message);
           return;
         }
-
-        //delete the html item
         event.target.parentElement.parentElement.remove();
       })
       .catch((err) => {
@@ -93,7 +89,6 @@ function generateTodos() {
         return;
       }
 
-      //render to li with todos
       document.getElementById("item_list").insertAdjacentHTML(
         "beforeend",
         todos
@@ -117,4 +112,6 @@ function generateTodos() {
       alert(err);
     });
 }
+
+
 

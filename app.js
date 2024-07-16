@@ -6,7 +6,8 @@ const validator = require("validator");
 const session = require("express-session");
 const  mongoDBSession = require("connect-mongodb-session")(session);
 const UserSchema = require("./UserSchema");
-const { cleanUpAndValidate } = require("./utils/AuthUtils");
+const jwt = require("jsonwebtoken");
+const { cleanUpAndValidate, jwtSign, sendVerificationEmail } = require("./utils/AuthUtils");
 const isAuth = require("./utils/middleware");
 const TodoModel = require("./models/TodoModel");
 const rateLimiting = require("./middleware.js/rateLimiting");
@@ -66,19 +67,55 @@ app.post("/register", async (req, res) => {
 
   try {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-    const user = new UserSchema({ name, email, password: hashedPassword, username });
+    const user = new UserSchema(
+      { 
+        name,
+         email, 
+         password: hashedPassword, 
+         username,
+         emailAuthenticated:false, 
+        }
+        );
 
     const userAvailability = await UserSchema.findOne({ email });
     if (userAvailability) {
       return res.status(403).json({ message: "User already exists" });
     }
-
-    await user.save();
-    return res.redirect("/login");
+    const verificationToken = jwtSign(email);    
+  const userDb =  await user.save();
+  sendVerificationEmail(email, verificationToken);
+    return res.send({
+      status:200,
+      message:"verification has been sent to your mail id, please verify before login",
+      data : {
+        _id: userDb._id,
+        username: userDb.username,
+        email: userDb.email,
+      },
+    })
   } catch (err) {
     console.error("Error registering user:", err);
     return res.status(500).json({ message: "Internal Server Error", error: err.message });
   }
+});
+
+app.get("/verifyEmail/:id", (req, res) => {
+  const token = req.params.id;
+  jwt.verify(token, sessionSecret, async (err, verifyJwtToken) => {
+    if (err) {
+      return res.send(err);
+    }
+
+  const userDB = await UserSchema.findOneAndUpdate({email:verifyJwtToken.email}, {emailAuthenticated:true})
+  if(userDB){
+    return res.status(200).redirect("/login");
+  }else{
+    return res.send({
+      status:400,
+      message: "Invalid session link",
+    });
+  }
+  });
 });
 
 app.post("/login", async (req, res) => {
@@ -97,6 +134,13 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ message: "User not found, please register first" });
     }
 
+    if(userDb.emailAuthenticated === false){
+      return res.send({
+        status:400,
+        message: "please verify your mail id",
+      })
+    }
+
     const isMatch = await bcrypt.compare(password, userDb.password);
     if (!isMatch) {
       return res.status(403).json({ message: "Incorrect password" });
@@ -108,7 +152,6 @@ app.post("/login", async (req, res) => {
       email: userDb.email,
       userId: userDb._id
     };
-
     return res.redirect("/dashboard");
   } catch (err) {
     console.error("Error logging in user:", err);
@@ -128,15 +171,13 @@ app.post("/logout", isAuth, rateLimiting, (req, res) => {
     }
     return res.redirect("/login");
   });
-});
+}); 
 
 app.post("/logout_from_all_devices", isAuth, rateLimiting, async (req, res) => {
   const username = req.session.user.username;
-
   try {
-    await store.sessionStore.collection("sessions").deleteMany({ "session.user.username": username });
-    console.log("Logged out from all devices.");
-    return res.json({ message: "Logged out from all devices successfully." });
+        await store.db.collection("sessions").deleteMany({ "session.user.username": username });
+    return res.redirect("/login");
   } catch (error) {
     console.error("Error logging out from all devices:", error);
     return res.status(500).json({ message: "Failed to log out from all devices.", error: error.message });
@@ -172,7 +213,7 @@ app.post("/edit-item", isAuth, rateLimiting, async (req, res) => {
     if (!todoDb) {
       return res.status(404).json({ message: "Todo not found" });
     }
-    return res.json({ message: "Todo updated successfully", data: todoDb });
+    return res.json({ message: "Todo updated successfully", data: todoDb })
   } catch (err) {
     console.error("Error updating todo item:", err);
     return res.status(500).json({ message: "Database error, please try again", error: err.message });
@@ -190,7 +231,6 @@ app.post("/delete-item", isAuth, rateLimiting, async (req, res) => {
     const todoDb = await TodoModel.findOneAndDelete({ _id: id });
     return res.json({ message: "Todo deleted successfully", data: todoDb });
   } catch (err) {
-    console.error("Error deleting todo item:", err);
     return res.status(500).json({ message: "Database error, please try again", error: err.message });
   }
 });
@@ -207,7 +247,6 @@ app.post("/pagination_dashboard", isAuth, async (req, res) => {
     ]);
     return res.json({ message: "Read successful", data: todos });
   } catch (err) {
-    console.error("Error fetching todos:", err);
     return res.status(400).json({ message: "Database error, please try again later", error: err.message });
   }
 });
