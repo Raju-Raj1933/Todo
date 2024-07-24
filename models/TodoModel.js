@@ -1,15 +1,15 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-const accessSchema = new Schema({
-  sessionId: {
+const todoSchema = new Schema({
+  todo: {
     type: String,
-    required: true,
+    require: true,
   },
-  time: {
+  username: {
     type: String,
-    required: true,
+    require: true,
   },
 });
 
-module.exports = mongoose.model("access", accessSchema);
+module.exports = mongoose.model("todo", todoSchema);
