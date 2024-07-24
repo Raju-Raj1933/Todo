@@ -12,14 +12,10 @@ const rateLimiting = async (req, res, next) => {
     });
   }
 
-  // Ratelimit logic
-
-  //Check is user has access recently
   const sessionDb = await AccessModel.findOne({ sessionId: sessionId });
 
   console.log(sessionDb);
   if (!sessionDb) {
-    //create the entry in the access model
 
     const accessTime = new AccessModel({
       sessionId: sessionId,
@@ -31,7 +27,6 @@ const rateLimiting = async (req, res, next) => {
     return;
   }
 
-  //if entry was there, then compare the time of req and sessionDb.time
 
   const previousAccessTime = sessionDb.time;
   const currentTime = Date.now();
@@ -45,7 +40,6 @@ const rateLimiting = async (req, res, next) => {
     });
   }
 
-  //allow the person to make the request by updating the previousAccess to currenttime
 
   try {
     await AccessModel.findOneAndUpdate(

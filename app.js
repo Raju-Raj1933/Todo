@@ -25,8 +25,8 @@ mongoose.connect(mongoURI)
   .catch(err => console.error("MongoDB connection error:", err));
 
 app.use(express.json());
-app.set("view engine", "ejs");
 app.use(express.urlencoded({ extended: true }));
+app.set("view engine", "ejs");
 app.use(express.static("public"));
 
 const store = new  mongoDBSession({
@@ -133,14 +133,12 @@ app.post("/login", async (req, res) => {
     if (!userDb) {
       return res.status(401).json({ message: "User not found, please register first" });
     }
-
     if(userDb.emailAuthenticated === false){
       return res.send({
         status:400,
         message: "please verify your mail id",
       })
     }
-
     const isMatch = await bcrypt.compare(password, userDb.password);
     if (!isMatch) {
       return res.status(403).json({ message: "Incorrect password" });

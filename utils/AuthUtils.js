@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 require('dotenv').config();
 
+const PORT = process.env.PORT || 8000;
+
 const sessionSecret = process.env.SESSION_SECRET;
 const SenderPassword = process.env.Sender_Password;
 
@@ -73,7 +75,7 @@ const sendVerificationEmail = ( email, verificationToken ) => {
           </tr>
           <tr>
             <td style="color: #153643; font-family: Arial, sans-serif; font-size: 16px; line-height: 24px; padding: 20px 0 30px 0;">
-            <a href="http://localhost:8000/verifyEmail/${verificationToken}" style=" border: none;
+            <a href="PORT/verifyEmail/${verificationToken}" style=" border: none;
             background-color: #ef7e5c;
     color: white;
     padding: 15px 32px;
