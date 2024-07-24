@@ -46,7 +46,7 @@ app.use(session({
 }));
 
 app.get("/", (req, res) => {
-  return res.send('<h1 style="text-align:center; color:#FF0000">Welcome To My ToDo App</h1>');
+  return res.render("register");
 });
 
 app.get("/register", (req, res) => {
